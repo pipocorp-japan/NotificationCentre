@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NotificationCentre</title>
+    
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@100..900&display=swap" rel="stylesheet">
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <script>
+        tailwind.config = {
+            darkMode: 'media',
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['"Noto Sans JP"', 'sans-serif'],
+                    },
+                    colors: {
+                        ios: {
+                            light: '#f2f2f7',
+                            dark: '#000000',
+                            cardLight: '#ffffff',
+                            cardDark: '#1c1c1e',
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+
+    <style>
+        body {
+            font-family: 'Noto Sans JP', sans-serif;
+            transition: background-color 0.5s ease, color 0.5s ease;
+        }
+
+        .notification-card {
+            transition: transform 0.2s cubic-bezier(0.4, 0, 0.2, 1), 
+                        background-color 0.3s ease, 
+                        box-shadow 0.3s ease;
+        }
+
+        .notification-card:active {
+            transform: scale(0.98);
+        }
+
+        .icon-placeholder {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            font-size: 1.2rem;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .animate-in {
+            animation: fadeIn 0.4s ease-out forwards;
+        }
+    </style>
+</head>
+<body class="bg-ios-light dark:bg-ios-dark text-gray-900 dark:text-gray-100 min-h-screen p-4 sm:p-6">
+
+    <header class="max-w-2xl mx-auto mb-6 flex justify-between items-center transition-opacity duration-700 ease-in opacity-0" id="app-header">
+        <h1 class="text-3xl font-black tracking-tight ml-2">NotificationCentre</h1>
+        <div class="text-sm text-gray-500 dark:text-gray-400 font-medium" id="current-date"></div>
+    </header>
+
+    <main id="notification-container" class="max-w-2xl mx-auto space-y-4">
+        <div id="status-message" class="text-center py-20 text-gray-500">
+            <div class="inline-block animate-spin rounded-full h-8 w-8 border-4 border-gray-300 border-t-blue-500 mb-4"></div>
+            <p>読み込み中...</p>
+        </div>
+    </main>
+
+    <script>
+        const PRIORITY_ICONS = {
+            0: 'ℹ️',
+            1: '⚠️',
+            2: '🛑'
+        };
+
+        document.addEventListener('DOMContentLoaded', async () => {
+            const now = new Date();
+            document.getElementById('current-date').textContent = now.toLocaleDateString('ja-JP', { month: 'long', day: 'numeric', weekday: 'short' });
+            
+            setTimeout(() => {
+                document.getElementById('app-header').classList.remove('opacity-0');
+            }, 100);
+
+            await loadDataAndRender();
+        });
+
+        async function loadDataAndRender() {
+            const container = document.getElementById('notification-container');
+            const statusMessage = document.getElementById('status-message');
+
+            try {
+                // ファイルのフェッチを実行
+                const [appsRes, notifsRes] = await Promise.all([
+                    fetch('apps.json'),
+                    fetch('info/notifications.json')
+                ]);
+
+                if (!appsRes.ok || !notifsRes.ok) {
+                    throw new Error(`ファイルの取得に失敗しました (Apps: ${appsRes.status}, Notifications: ${notifsRes.status})`);
+                }
+
+                const appsData = await appsRes.json();
+                const notificationsData = await notifsRes.json();
+
+                renderNotifications(appsData, notificationsData);
+
+            } catch (error) {
+                console.error(error);
+                // エラー時の表示
+                container.innerHTML = `
+                    <div class="text-center py-20 px-6 bg-white dark:bg-ios-cardDark rounded-3xl shadow-sm border border-red-100 dark:border-red-900/30 animate-in">
+                        <div class="text-4xl mb-4">📂❌</div>
+                        <h2 class="text-xl font-bold text-red-600 dark:text-red-400 mb-2">読み込みエラー</h2>
+                        <p class="text-gray-500 dark:text-gray-400 text-sm mb-6">
+                            通知データの取得に失敗しました。ファイル構成を確認してください。
+                        </p>
+                        <code class="block p-3 bg-gray-100 dark:bg-black rounded-lg text-xs text-left overflow-x-auto text-gray-600 dark:text-gray-400">
+                            ${error.message}
+                        </code>
+                        <button onclick="location.reload()" class="mt-8 px-6 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded-full font-bold transition-colors">
+                            再試行
+                        </button>
+                    </div>
+                `;
+            }
+        }
+
+        function renderNotifications(apps, notifications) {
+            const container = document.getElementById('notification-container');
+            container.innerHTML = '';
+
+            const appMap = new Map(apps.map(app => [app.id, app.name]));
+
+            if (!notifications || notifications.length === 0) {
+                container.innerHTML = `
+                    <div class="text-center py-20 text-gray-500 animate-in">
+                        <div class="text-4xl mb-2">🔔</div>
+                        <p>通知はありません</p>
+                    </div>
+                `;
+                return;
+            }
+
+            notifications.forEach((note, index) => {
+                const appName = appMap.get(note.appkind) || note.appkind || "不明なアプリ";
+                const dateStr = note.date ? `${note.date[0]}/${note.date[1]}/${note.date[2]}` : "";
+                const priorityEmoji = PRIORITY_ICONS[note.priority] !== undefined ? PRIORITY_ICONS[note.priority] : 'ℹ️';
+                const iconPath = `appicon/${note.appkind}.png`;
+
+                const card = document.createElement('div');
+                card.className = `notification-card bg-ios-cardLight dark:bg-ios-cardDark rounded-2xl p-4 shadow-sm hover:shadow-md mb-4 border border-gray-100 dark:border-gray-800 opacity-0 translate-y-4`;
+                
+                setTimeout(() => {
+                    card.classList.add('animate-in');
+                    card.classList.remove('opacity-0', 'translate-y-4');
+                }, index * 80);
+
+                card.innerHTML = `
+                    <div class="flex items-start gap-4">
+                        <div class="relative flex-shrink-0">
+                            <div class="w-14 h-14 rounded-xl overflow-hidden bg-gray-200 dark:bg-gray-700 shadow-inner">
+                                <img src="${iconPath}" 
+                                     alt="${appName}" 
+                                     class="w-full h-full object-cover"
+                                     onerror="this.onerror=null; this.parentElement.classList.add('icon-placeholder'); this.parentElement.innerHTML='${(note.appkind || '??').substring(0,2)}';">
+                            </div>
+                            <div class="absolute -bottom-1 -right-1 bg-white dark:bg-[#1c1c1e] rounded-full w-6 h-6 flex items-center justify-center text-sm shadow-sm border-2 border-white dark:border-[#1c1c1e]">
+                                ${priorityEmoji}
+                            </div>
+                        </div>
+
+                        <div class="flex-1 min-w-0 pt-0.5">
+                            <div class="flex justify-between items-baseline mb-0.5">
+                                <h3 class="font-bold text-gray-500 dark:text-gray-400 truncate pr-2" style="font-size: 1.03em;">
+                                    ${appName}
+                                </h3>
+                                <span class="text-xs text-gray-400 whitespace-nowrap">${dateStr}</span>
+                            </div>
+
+                            <h2 class="font-bold text-gray-900 dark:text-white leading-tight mb-1" style="font-size: 1.07em;">
+                                ${note.title}
+                            </h2>
+
+                            <p class="text-gray-600 dark:text-gray-300 text-sm leading-relaxed">
+                                ${note.content}
+                            </p>
+                        </div>
+                    </div>
+                `;
+
+                container.appendChild(card);
+            });
+        }
+    </script>
+</body>
+</html>
