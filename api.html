@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <title>Notification API</title>
+</head>
+<body>
+    <script>
+        /**
+         * このスクリプトはサーバーの通知データをメモリにキャッシュし、
+         * 後の関数呼び出しで await を不要にします。
+         */
+        var _cachedNotifications = [];
+
+        // ページ読み込み時に一度だけデータを取得しておく
+        (function() {
+            var xhr = new XMLHttpRequest();
+            // 実行環境（Blob URL等）でのパス不一致エラーを避けるため、絶対パスを構築
+            var targetUrl = window.location.origin + window.location.pathname.substring(0, window.location.pathname.lastIndexOf('/') + 1) + 'info/notifications.json';
+            
+            try {
+                xhr.open('GET', targetUrl, true);
+                xhr.onreadystatechange = function() {
+                    if (xhr.readyState === 4 && xhr.status === 200) {
+                        try {
+                            _cachedNotifications = JSON.parse(xhr.responseText);
+                            console.log("Notification API: Data synchronized.");
+                        } catch (e) {
+                            console.error("Notification API: JSON parse error", e);
+                        }
+                    }
+                };
+                xhr.send();
+            } catch (e) {
+                console.error("Notification API: Failed to open XHR", e);
+            }
+        })();
+
+        /**
+         * 内部用：キャッシュから条件に合う最初の1件を返す
+         */
+        function _findMatch(appkind, dateArray) {
+            if (!_cachedNotifications || _cachedNotifications.length === 0) return null;
+            
+            for (var i = 0; i < _cachedNotifications.length; i++) {
+                var n = _cachedNotifications[i];
+                if (n.appkind === appkind && 
+                    n.date && 
+                    n.date[0] === dateArray[0] && 
+                    n.date[1] === dateArray[1] && 
+                    n.date[2] === dateArray[2]) {
+                    return n;
+                }
+            }
+            return null;
+        }
+
+        /**
+         * 指定したアプリIDと日付の通知タイトルを返します
+         */
+        function getTitle(appkind, dateArray) {
+            var match = _findMatch(appkind, dateArray);
+            return match ? match.title : "";
+        }
+
+        /**
+         * 指定したアプリIDと日付の通知本文を返します
+         */
+        function getContent(appkind, dateArray) {
+            var match = _findMatch(appkind, dateArray);
+            return match ? match.content : "";
+        }
+
+        /**
+         * 指定したアプリIDと日付の通知重要度を返します
+         */
+        function getPriority(appkind, dateArray) {
+            var match = _findMatch(appkind, dateArray);
+            return (match !== null) ? match.priority : -1;
+        }
+
+        // グローバルに関数を登録
+        window.getTitle = getTitle;
+        window.getContent = getContent;
+        window.getPriority = getPriority;
+
+        console.log("Notification API (Synchronous version) is ready.");
+    </script>
+</body>
+</html>
