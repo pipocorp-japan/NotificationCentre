@@ -1,0 +1,18 @@
+[ 
+  {
+    "name": "Whisper",
+    "id": "WHU"
+  },{
+    "name": "Whisper Kernel",
+    "id": "WHK"
+  },{
+    "name": "Dryer",
+    "id": "DRY"
+  },{
+    "name": "Downloader",
+    "id": "DOW"
+  },{
+    "name": "運営元",
+    "id": "OPE"
+  }
+]
