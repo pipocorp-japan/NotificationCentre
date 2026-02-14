@@ -7,13 +7,13 @@
     
     <!-- PWA Manifest -->
     <link rel="manifest" href="manifest.json">
-    <meta name="theme-color" content="#007aff">
+    <meta name="theme-color" id="meta-theme-color" content="#007aff">
     <link rel="apple-touch-icon" href="appicon/WHK.png">
     
-    <!-- Google Fonts -->
+    <!-- Google Fonts & Material Symbols -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@100..900&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@100..900&family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200&display=swap" rel="stylesheet">
     
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
@@ -30,8 +30,8 @@
                         ios: {
                             light: '#f2f2f7',
                             dark: '#000000',
-                            cardLight: '#ffffff',
-                            cardDark: '#1c1c1e',
+                            cardLight: 'rgba(255, 255, 255, 0.8)',
+                            cardDark: 'rgba(28, 28, 30, 0.8)',
                         }
                     }
                 }
@@ -40,215 +40,392 @@
     </script>
 
     <style>
+        :root {
+            --accent-color: #007aff;
+        }
+
         body {
             font-family: 'Noto Sans JP', sans-serif;
-            transition: background-color 0.5s ease, color 0.5s ease;
+            transition: background-color 0.5s ease;
+            user-select: none;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        /* iOS-style Glassmorphism */
+        .glass-effect {
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
         }
 
         .notification-card {
-            transition: transform 0.2s cubic-bezier(0.4, 0, 0.2, 1), 
-                        background-color 0.3s ease, 
-                        box-shadow 0.3s ease;
+            transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.3s ease, margin 0.3s ease;
+            cursor: pointer;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
         }
 
         .notification-card:active {
-            transform: scale(0.98);
+            transform: scale(0.97);
+            opacity: 0.8;
+        }
+
+        .notification-card.read-anim {
+            transform: translateX(100%);
+            opacity: 0;
+            margin-top: -80px;
+            pointer-events: none;
         }
 
         .icon-placeholder {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            background: linear-gradient(135deg, #a1a1aa 0%, #71717a 100%);
             color: white;
             display: flex;
             align-items: center;
             justify-content: center;
             font-weight: bold;
-            font-size: 1.2rem;
         }
 
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+
         @keyframes fadeIn {
-            from { opacity: 0; transform: translateY(10px); }
-            to { opacity: 1; transform: translateY(0); }
+            from { opacity: 0; transform: translateY(15px) scale(0.98); }
+            to { opacity: 1; transform: translateY(0) scale(1); }
         }
 
         .animate-in {
-            animation: fadeIn 0.4s ease-out forwards;
+            animation: fadeIn 0.4s cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
+        }
+
+        .filter-chip.active {
+            background-color: var(--accent-color);
+            color: white;
+            box-shadow: 0 4px 10px rgba(0, 122, 255, 0.3);
+        }
+
+        .modal-bg {
+            background-color: rgba(0, 0, 0, 0.3);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+        }
+
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 1, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+            font-size: 22px;
+        }
+        
+        /* Icon transition animation */
+        #toggle-archive span {
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
         }
     </style>
 </head>
-<body class="bg-ios-light dark:bg-ios-dark text-gray-900 dark:text-gray-100 min-h-screen p-4 sm:p-6">
+<body class="bg-[#f2f2f7] dark:bg-black text-gray-900 dark:text-gray-100 min-h-screen p-4 sm:p-6 pb-20">
 
-    <header class="max-w-2xl mx-auto mb-6 flex justify-between items-center transition-opacity duration-700 ease-in opacity-0" id="app-header">
-        <h1 class="text-3xl font-black tracking-tight ml-2">NotificationCentre</h1>
-        <div class="flex items-center gap-4">
-            <!-- ボタンの表示条件を緩和し、デバッグしやすくしました -->
-            <button id="enable-notifications" class="hidden text-xs bg-blue-500 hover:bg-blue-600 text-white px-3 py-1 rounded-full font-bold transition-all shadow-sm active:scale-95">
-                通知設定を確認
+    <header class="max-w-2xl mx-auto mb-6 flex justify-between items-end" id="app-header">
+        <div>
+            <div class="text-[11px] text-gray-400 dark:text-zinc-500 font-bold uppercase tracking-[0.1em] mb-0.5 ml-1" id="current-date"></div>
+            <h1 class="text-4xl font-extrabold tracking-tight" id="main-title">通知</h1>
+        </div>
+        <div class="flex gap-2">
+            <button id="toggle-archive" class="w-10 h-10 flex items-center justify-center bg-white/80 dark:bg-zinc-800/80 glass-effect rounded-full shadow-sm active:scale-90 transition-all">
+                <!-- Initially showing 'archive' to see read items -->
+                <span class="material-symbols-outlined text-gray-600 dark:text-zinc-300">archive</span>
             </button>
-            <div class="text-sm text-gray-500 dark:text-gray-400 font-medium" id="current-date"></div>
+            <button id="open-settings" class="w-10 h-10 flex items-center justify-center bg-white/80 dark:bg-zinc-800/80 glass-effect rounded-full shadow-sm active:scale-90 transition-all">
+                <span class="material-symbols-outlined text-gray-600 dark:text-zinc-300">settings</span>
+            </button>
         </div>
     </header>
 
-    <main id="notification-container" class="max-w-2xl mx-auto space-y-4">
-        <div id="status-message" class="text-center py-20 text-gray-500">
-            <div class="inline-block animate-spin rounded-full h-8 w-8 border-4 border-gray-300 border-t-blue-500 mb-4"></div>
-            <p>読み込み中...</p>
+    <!-- Filter chips -->
+    <div class="max-w-2xl mx-auto mb-6 flex gap-2 overflow-x-auto no-scrollbar py-1" id="filter-container">
+        <button class="filter-chip active flex-shrink-0 px-5 py-2 rounded-full bg-white dark:bg-zinc-800 text-sm font-semibold shadow-sm transition-all" data-filter="all">
+            すべて
+        </button>
+    </div>
+
+    <main id="notification-container" class="max-w-2xl mx-auto space-y-2">
+        <div id="status-message" class="text-center py-24 text-gray-400">
+            <div class="inline-block animate-spin rounded-full h-8 w-8 border-2 border-gray-300 border-t-blue-500 mb-4"></div>
+            <p class="text-sm font-medium tracking-wide">読み込み中...</p>
         </div>
     </main>
 
+    <!-- Settings Modal -->
+    <div id="settings-modal" class="fixed inset-0 z-50 modal-bg hidden flex items-end sm:items-center justify-center p-0 sm:p-4">
+        <div class="bg-[#f2f2f7] dark:bg-zinc-900 w-full max-w-lg rounded-t-[32px] sm:rounded-[32px] overflow-hidden shadow-2xl animate-in">
+            <div class="px-6 py-4 border-b border-gray-200 dark:border-zinc-800 flex justify-between items-center bg-white/50 dark:bg-zinc-900/50 glass-effect">
+                <h2 class="text-lg font-bold tracking-tight">設定</h2>
+                <button id="close-settings" class="text-blue-500 font-bold px-2 py-1 active:opacity-40">完了</button>
+            </div>
+            
+            <div class="p-6 space-y-8 max-h-[75vh] overflow-y-auto no-scrollbar">
+                <!-- Accent Color -->
+                <section>
+                    <h3 class="text-[11px] font-bold text-gray-400 dark:text-zinc-500 uppercase tracking-widest mb-3 ml-2">アクセントカラー</h3>
+                    <div class="flex justify-between bg-white dark:bg-zinc-800 p-4 rounded-2xl shadow-sm">
+                        <button class="accent-dot w-9 h-9 rounded-full bg-[#007aff]" data-color="#007aff"></button>
+                        <button class="accent-dot w-9 h-9 rounded-full bg-[#ff3b30]" data-color="#ff3b30"></button>
+                        <button class="accent-dot w-9 h-9 rounded-full bg-[#34c759]" data-color="#34c759"></button>
+                        <button class="accent-dot w-9 h-9 rounded-full bg-[#ff9500]" data-color="#ff9500"></button>
+                        <button class="accent-dot w-9 h-9 rounded-full bg-[#af52de]" data-color="#af52de"></button>
+                    </div>
+                </section>
+
+                <!-- Filter Style -->
+                <section>
+                    <h3 class="text-[11px] font-bold text-gray-400 dark:text-zinc-500 uppercase tracking-widest mb-3 ml-2">フィルター表示形式</h3>
+                    <div class="bg-white dark:bg-zinc-800 rounded-2xl shadow-sm divide-y dark:divide-zinc-700 overflow-hidden text-sm">
+                        <button class="w-full px-5 py-4 flex justify-between items-center filter-style-opt" data-style="both">
+                            <span class="font-medium">アイコンとテキスト</span>
+                            <span class="check hidden material-symbols-outlined text-blue-500">check</span>
+                        </button>
+                        <button class="w-full px-5 py-4 flex justify-between items-center filter-style-opt" data-style="icon">
+                            <span class="font-medium">アイコンのみ</span>
+                            <span class="check hidden material-symbols-outlined text-blue-500">check</span>
+                        </button>
+                        <button class="w-full px-5 py-4 flex justify-between items-center filter-style-opt" data-style="text">
+                            <span class="font-medium">テキストのみ</span>
+                            <span class="check hidden material-symbols-outlined text-blue-500">check</span>
+                        </button>
+                    </div>
+                </section>
+
+                <!-- Reset Data -->
+                <section>
+                    <h3 class="text-[11px] font-bold text-gray-400 dark:text-zinc-500 uppercase tracking-widest mb-3 ml-2">データ管理</h3>
+                    <button id="reset-history" class="w-full py-4 bg-white dark:bg-zinc-800 text-[#ff3b30] font-bold rounded-2xl shadow-sm active:bg-gray-50 dark:active:bg-zinc-700 transition-colors">
+                        履歴をリセット
+                    </button>
+                    <p class="text-[11px] text-gray-400 dark:text-zinc-500 mt-3 px-2 text-center leading-relaxed">通知の既読状態をすべて解除します。<br>この操作は取り消せません。</p>
+                </section>
+            </div>
+        </div>
+    </div>
+
     <script>
-        const PRIORITY_ICONS = {
-            0: 'ℹ️',
-            1: '⚠️',
-            2: '🛑'
+        const PRIORITY_ICONS = { 0: 'info', 1: 'warning', 2: 'error' };
+        let allNotifications = [];
+        let appDataMap = {};
+        let currentFilter = 'all';
+        let showArchive = false;
+
+        let settings = {
+            accent: '#007aff',
+            filterStyle: 'both'
         };
 
         const getAbsPath = (relPath) => {
             try {
                 const base = window.location.origin + window.location.pathname.substring(0, window.location.pathname.lastIndexOf('/') + 1);
                 return base + relPath;
-            } catch (e) {
-                return relPath;
+            } catch (e) { return relPath; }
+        };
+
+        const STORAGE_READ = 'nc_read_notifications';
+        const STORAGE_SETTING = 'nc_settings';
+
+        const saveSettings = () => {
+            localStorage.setItem(STORAGE_SETTING, JSON.stringify(settings));
+            applySettings();
+        };
+
+        const loadSettings = () => {
+            const saved = localStorage.getItem(STORAGE_SETTING);
+            if (saved) settings = { ...settings, ...JSON.parse(saved) };
+            applySettings();
+        };
+
+        const applySettings = () => {
+            document.documentElement.style.setProperty('--accent-color', settings.accent);
+            document.getElementById('meta-theme-color').content = settings.accent;
+            
+            document.querySelectorAll('.accent-dot').forEach(dot => {
+                if (dot.dataset.color === settings.accent) {
+                    dot.classList.add('ring-4', 'ring-white', 'scale-110');
+                } else {
+                    dot.classList.remove('ring-4', 'ring-white', 'scale-110');
+                }
+            });
+
+            document.querySelectorAll('.filter-style-opt').forEach(opt => {
+                const check = opt.querySelector('.check');
+                if (opt.dataset.style === settings.filterStyle) check.classList.remove('hidden');
+                else check.classList.add('hidden');
+            });
+
+            if (allNotifications.length > 0) {
+                renderFilterChips();
+                renderApp();
             }
         };
 
-        const notificationBtn = document.getElementById('enable-notifications');
-        const isNotificationSupported = typeof window !== "undefined" && "Notification" in window;
-        
-        // デバッグ用：現在の権限をログに出力
-        if (isNotificationSupported) {
-            console.log("Current Notification Permission:", Notification.permission);
-            
-            // 権限がまだ「既定（default）」の場合はボタンを表示
-            // もし「拒否（denied）」されている場合はブラウザの設定から変更する必要があるため、
-            // ボタンの文言を「設定を確認」にして常に操作可能にすることも検討できます。
-            if (Notification.permission === "default") {
-                notificationBtn.classList.remove('hidden');
-                notificationBtn.innerText = "通知を許可";
-            } else if (Notification.permission === "denied") {
-                // 拒否されている場合、ヒントとして表示（任意）
-                notificationBtn.classList.remove('hidden');
-                notificationBtn.classList.replace('bg-blue-500', 'bg-gray-400');
-                notificationBtn.innerText = "通知がブロックされています";
-                notificationBtn.disabled = true;
+        const getReadIds = () => JSON.parse(localStorage.getItem(STORAGE_READ) || '[]');
+        const markAsRead = (id) => {
+            const readIds = getReadIds();
+            if (!readIds.includes(id)) {
+                readIds.push(id);
+                localStorage.setItem(STORAGE_READ, JSON.stringify(readIds));
             }
-            
-            notificationBtn.addEventListener('click', () => {
-                const handlePermission = (permission) => {
-                    console.log("New permission state:", permission);
-                    if (permission === "granted") {
-                        notificationBtn.classList.add('hidden');
-                        showDesktopNotification("NotificationCentre", "通知が有効になりました！");
-                    } else if (permission === "denied") {
-                        notificationBtn.innerText = "設定でブロックされています";
-                        notificationBtn.classList.replace('bg-blue-500', 'bg-red-400');
-                    }
-                };
-
-                try {
-                    const promise = Notification.requestPermission(handlePermission);
-                    if (promise) {
-                        promise.then(handlePermission);
-                    }
-                } catch (e) {
-                    Notification.requestPermission(handlePermission);
-                }
-            });
-        } else {
-            console.warn("このブラウザは通知機能をサポートしていません。");
-        }
-
-        function showDesktopNotification(title, content, icon) {
-            if (isNotificationSupported && Notification.permission === "granted") {
-                try {
-                    const options = {
-                        body: content,
-                        icon: icon || getAbsPath('appicon/WHK.png'),
-                        badge: getAbsPath('appicon/WHK.png')
-                    };
-                    new Notification(title, options);
-                } catch (e) {
-                    console.error("通知の作成に失敗しました:", e);
-                }
-            }
-        }
+        };
 
         document.addEventListener('DOMContentLoaded', async () => {
-            const now = new Date();
-            document.getElementById('current-date').textContent = now.toLocaleDateString('ja-JP', { month: 'long', day: 'numeric', weekday: 'short' });
-            
-            setTimeout(() => {
-                document.getElementById('app-header').classList.remove('opacity-0');
-            }, 100);
+            loadSettings();
 
-            await loadDataAndRender();
+            const now = new Date();
+            const options = { month: 'long', day: 'numeric', weekday: 'short' };
+            document.getElementById('current-date').textContent = now.toLocaleDateString('ja-JP', options);
+            
+            document.getElementById('open-settings').onclick = () => document.getElementById('settings-modal').classList.remove('hidden');
+            document.getElementById('close-settings').onclick = () => document.getElementById('settings-modal').classList.add('hidden');
+            
+            document.getElementById('toggle-archive').onclick = (e) => {
+                showArchive = !showArchive;
+                const btn = e.currentTarget;
+                const iconSpan = btn.querySelector('span');
+                
+                if (showArchive) {
+                    // Changing to archive view: show 'notifications' (bell) icon to go back to inbox
+                    iconSpan.textContent = 'notifications';
+                    document.getElementById('main-title').textContent = 'アーカイブ';
+                } else {
+                    // Changing to inbox view: show 'archive' icon to see read items
+                    iconSpan.textContent = 'archive';
+                    document.getElementById('main-title').textContent = '通知';
+                }
+                renderApp();
+            };
+
+            document.querySelectorAll('.accent-dot').forEach(dot => {
+                dot.onclick = () => { settings.accent = dot.dataset.color; saveSettings(); };
+            });
+
+            document.querySelectorAll('.filter-style-opt').forEach(opt => {
+                opt.onclick = () => { settings.filterStyle = opt.dataset.style; saveSettings(); };
+            });
+
+            document.getElementById('reset-history').onclick = () => {
+                localStorage.removeItem(STORAGE_READ);
+                renderApp();
+                document.getElementById('settings-modal').classList.add('hidden');
+            };
+
+            await loadData();
+            renderApp();
         });
 
-        async function loadDataAndRender() {
-            const container = document.getElementById('notification-container');
-
+        async function loadData() {
             try {
                 const [appsRes, notifsRes] = await Promise.all([
                     fetch(getAbsPath('apps.json')),
                     fetch(getAbsPath('info/notifications.json'))
                 ]);
-
-                if (!appsRes.ok || !notifsRes.ok) {
-                    throw new Error(`ファイルの取得に失敗しました`);
-                }
-
-                const appsData = await appsRes.json();
-                const notificationsData = await notifsRes.json();
-
-                renderNotifications(appsData, notificationsData);
-
-                // 初回読み込み時に権限があればテスト通知
-                if (notificationsData.length > 0 && isNotificationSupported && Notification.permission === "granted") {
-                    const latest = notificationsData[0];
-                    showDesktopNotification(latest.title, latest.content, getAbsPath(`appicon/${latest.appkind}.png`));
-                }
-
+                if (!appsRes.ok || !notifsRes.ok) throw new Error();
+                const apps = await appsRes.json();
+                allNotifications = await notifsRes.json();
+                apps.forEach(app => { appDataMap[app.id] = app.name; });
+                renderFilterChips();
             } catch (error) {
-                console.error(error);
-                container.innerHTML = `<div class="text-center py-20 text-red-500">読み込みエラーが発生しました</div>`;
+                document.getElementById('status-message').innerHTML = '<p class="text-red-500 font-bold">データの取得に失敗しました</p>';
             }
         }
 
-        function renderNotifications(apps, notifications) {
+        function renderFilterChips() {
+            const container = document.getElementById('filter-container');
+            container.innerHTML = '';
+            
+            const createChip = (id, label) => {
+                const btn = document.createElement('button');
+                btn.className = `filter-chip flex-shrink-0 flex items-center gap-2 px-5 py-2 rounded-full bg-white dark:bg-zinc-800 text-sm font-semibold shadow-sm transition-all ${currentFilter === id ? 'active' : ''}`;
+                
+                const iconPath = getAbsPath(`appicon/${id}.png`);
+                
+                if (settings.filterStyle !== 'text' && id !== 'all') {
+                    const img = document.createElement('img');
+                    img.src = iconPath;
+                    img.className = "w-4 h-4 rounded-[4px] object-cover";
+                    img.onerror = () => img.remove();
+                    btn.appendChild(img);
+                }
+
+                if (settings.filterStyle !== 'icon' || id === 'all') {
+                    const span = document.createElement('span');
+                    span.textContent = label;
+                    btn.appendChild(span);
+                }
+                
+                btn.onclick = () => {
+                    currentFilter = id;
+                    document.querySelectorAll('.filter-chip').forEach(c => c.classList.remove('active'));
+                    btn.classList.add('active');
+                    renderApp();
+                };
+                return btn;
+            };
+
+            container.appendChild(createChip('all', 'すべて'));
+            const uniqueApps = [...new Set(allNotifications.map(n => n.appkind))];
+            uniqueApps.forEach(appId => {
+                container.appendChild(createChip(appId, appDataMap[appId] || appId));
+            });
+        }
+
+        function renderApp() {
             const container = document.getElementById('notification-container');
             container.innerHTML = '';
-            const appMap = new Map(apps.map(app => [app.id, app.name]));
+            const readIds = getReadIds();
+            
+            const filtered = allNotifications.filter(note => {
+                const noteId = `${note.appkind}-${note.title}-${note.date?.join('')}`;
+                const isRead = readIds.includes(noteId);
+                const showThis = showArchive ? isRead : !isRead;
+                const matchesFilter = currentFilter === 'all' || note.appkind === currentFilter;
+                return showThis && matchesFilter;
+            });
 
-            notifications.forEach((note, index) => {
-                const appName = appMap.get(note.appkind) || note.appkind || "App";
-                const dateStr = note.date ? `${note.date[0]}/${note.date[1]}/${note.date[2]}` : "";
-                const priorityEmoji = PRIORITY_ICONS[note.priority] !== undefined ? PRIORITY_ICONS[note.priority] : 'ℹ️';
+            if (filtered.length === 0) {
+                container.innerHTML = `
+                    <div class="text-center py-32 text-gray-400 dark:text-zinc-600 animate-in">
+                        <span class="material-symbols-outlined text-6xl mb-4 block opacity-20">${showArchive ? 'inbox' : 'notifications_off'}</span>
+                        <p class="font-bold tracking-wide">${showArchive ? 'アーカイブはありません' : '新しい通知はありません'}</p>
+                    </div>`;
+                return;
+            }
+
+            filtered.forEach((note, index) => {
+                const noteId = `${note.appkind}-${note.title}-${note.date?.join('')}`;
+                const appName = appDataMap[note.appkind] || note.appkind;
+                const dateStr = note.date ? `${note.date[1]}/${note.date[2]}` : "";
                 const iconPath = getAbsPath(`appicon/${note.appkind}.png`);
+                const priorityIcon = PRIORITY_ICONS[note.priority] || 'info';
 
                 const card = document.createElement('div');
-                card.className = `notification-card bg-ios-cardLight dark:bg-ios-cardDark rounded-2xl p-4 shadow-sm mb-4 border border-gray-100 dark:border-gray-800 opacity-0 translate-y-4`;
+                card.className = `notification-card bg-ios-cardLight dark:bg-ios-cardDark glass-effect rounded-[22px] p-4 border border-white/40 dark:border-zinc-700/50 opacity-0`;
                 
-                setTimeout(() => {
-                    card.classList.add('animate-in');
-                    card.classList.remove('opacity-0', 'translate-y-4');
-                }, index * 80);
+                if (!showArchive) {
+                    card.onclick = () => {
+                        card.classList.add('read-anim');
+                        setTimeout(() => { markAsRead(noteId); renderApp(); }, 300);
+                    };
+                }
+
+                setTimeout(() => card.classList.add('animate-in'), index * 60);
 
                 card.innerHTML = `
                     <div class="flex items-start gap-4">
-                        <div class="relative flex-shrink-0">
-                            <div class="w-14 h-14 rounded-xl overflow-hidden bg-gray-200 dark:bg-gray-700 shadow-inner">
-                                <img src="${iconPath}" alt="${appName}" class="w-full h-full object-cover" onerror="this.style.display='none'; this.parentElement.classList.add('icon-placeholder'); this.parentElement.innerText='${appName.substring(0,1)}';">
-                            </div>
-                            <div class="absolute -bottom-1 -right-1 bg-white dark:bg-[#1c1c1e] rounded-full w-6 h-6 flex items-center justify-center text-sm shadow-sm border-2 border-white dark:border-[#1c1c1e]">
-                                ${priorityEmoji}
+                        <div class="w-12 h-12 rounded-[11px] overflow-hidden flex-shrink-0 bg-white/50 shadow-inner relative">
+                            <img src="${iconPath}" alt="" class="w-full h-full object-cover" onerror="this.style.display='none'; this.parentElement.classList.add('icon-placeholder'); this.parentElement.innerText='${appName.substring(0,1)}';">
+                            <div class="absolute -bottom-1 -right-1 bg-white dark:bg-zinc-900 rounded-full p-0.5 shadow-sm border border-gray-100 dark:border-zinc-800">
+                                <span class="material-symbols-outlined !text-[12px] text-orange-500">${priorityIcon}</span>
                             </div>
                         </div>
-                        <div class="flex-1 min-w-0 pt-0.5">
-                            <div class="flex justify-between items-baseline mb-0.5">
-                                <h3 class="font-bold text-gray-500 dark:text-gray-400 truncate pr-2">${appName}</h3>
-                                <span class="text-xs text-gray-400">${dateStr}</span>
+                        <div class="flex-1 min-w-0">
+                            <div class="flex justify-between items-center mb-0.5">
+                                <span class="text-[11px] font-bold text-gray-400 dark:text-zinc-500 uppercase tracking-widest truncate max-w-[120px]">${appName}</span>
+                                <span class="text-[10px] font-semibold text-gray-400 dark:text-zinc-500">${dateStr}</span>
                             </div>
-                            <h2 class="font-bold text-gray-900 dark:text-white mb-1">${note.title}</h2>
-                            <p class="text-gray-600 dark:text-gray-300 text-sm leading-relaxed">${note.content}</p>
+                            <h2 class="text-[15px] font-bold text-gray-900 dark:text-white leading-snug mb-0.5">${note.title}</h2>
+                            <p class="text-[13px] text-gray-600 dark:text-zinc-400 leading-normal ${showArchive ? '' : 'line-clamp-2'}">${note.content}</p>
                         </div>
                     </div>
                 `;
