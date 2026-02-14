@@ -5,6 +5,11 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>NotificationCentre</title>
     
+    <!-- PWA Manifest -->
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#007aff">
+    <link rel="apple-touch-icon" href="appicon/WHK.png">
+    
     <!-- Google Fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -96,6 +101,16 @@
             2: '🛑'
         };
 
+        // 実行環境（Blob URL等）に対応するための絶対パス構築ヘルパー
+        const getAbsPath = (relPath) => {
+            try {
+                const base = window.location.origin + window.location.pathname.substring(0, window.location.pathname.lastIndexOf('/') + 1);
+                return base + relPath;
+            } catch (e) {
+                return relPath;
+            }
+        };
+
         // デスクトップ通知の許可リクエスト
         const notificationBtn = document.getElementById('enable-notifications');
         
@@ -118,7 +133,7 @@
             if ("Notification" in window && Notification.permission === "granted") {
                 new Notification(title, {
                     body: content,
-                    icon: icon || 'appicon/WHK.png' // デフォルトアイコン
+                    icon: icon || getAbsPath('appicon/WHK.png')
                 });
             }
         }
@@ -139,8 +154,8 @@
 
             try {
                 const [appsRes, notifsRes] = await Promise.all([
-                    fetch('apps.json'),
-                    fetch('info/notifications.json')
+                    fetch(getAbsPath('apps.json')),
+                    fetch(getAbsPath('info/notifications.json'))
                 ]);
 
                 if (!appsRes.ok || !notifsRes.ok) {
@@ -152,10 +167,10 @@
 
                 renderNotifications(appsData, notificationsData);
 
-                // 最新の通知をデスクトップ通知として送る（デモ用：一番上の通知を表示）
+                // 最新の通知をデスクトップ通知として表示
                 if (notificationsData.length > 0 && Notification.permission === "granted") {
                     const latest = notificationsData[0];
-                    showDesktopNotification(latest.title, latest.content, `appicon/${latest.appkind}.png`);
+                    showDesktopNotification(latest.title, latest.content, getAbsPath(`appicon/${latest.appkind}.png`));
                 }
 
             } catch (error) {
@@ -195,7 +210,7 @@
                 const appName = appMap.get(note.appkind) || note.appkind || "不明なアプリ";
                 const dateStr = note.date ? `${note.date[0]}/${note.date[1]}/${note.date[2]}` : "";
                 const priorityEmoji = PRIORITY_ICONS[note.priority] !== undefined ? PRIORITY_ICONS[note.priority] : 'ℹ️';
-                const iconPath = `appicon/${note.appkind}.png`;
+                const iconPath = getAbsPath(`appicon/${note.appkind}.png`);
 
                 const card = document.createElement('div');
                 card.className = `notification-card bg-ios-cardLight dark:bg-ios-cardDark rounded-2xl p-4 shadow-sm hover:shadow-md mb-4 border border-gray-100 dark:border-gray-800 opacity-0 translate-y-4`;
