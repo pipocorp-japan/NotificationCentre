@@ -111,30 +111,51 @@
             }
         };
 
-        // デスクトップ通知の許可リクエスト
+        // デスクトップ通知のサポート確認と許可リクエスト
         const notificationBtn = document.getElementById('enable-notifications');
+        const isNotificationSupported = typeof window !== "undefined" && "Notification" in window;
         
-        if ("Notification" in window) {
+        if (isNotificationSupported) {
+            // Safariなどのための初期表示チェック
             if (Notification.permission === "default") {
                 notificationBtn.classList.remove('hidden');
             }
             
             notificationBtn.addEventListener('click', () => {
-                Notification.requestPermission().then(permission => {
+                // SafariとChromeの両方で動作するよう、Promiseとコールバックを併用
+                const handlePermission = (permission) => {
                     if (permission === "granted") {
                         notificationBtn.classList.add('hidden');
                         showDesktopNotification("NotificationCentre", "デスクトップ通知が有効になりました。");
                     }
-                });
+                };
+
+                try {
+                    const promise = Notification.requestPermission(handlePermission);
+                    if (promise) {
+                        promise.then(handlePermission);
+                    }
+                } catch (e) {
+                    Notification.requestPermission(handlePermission);
+                }
             });
+        } else {
+            console.log("Notification API is not supported in this browser.");
         }
 
         function showDesktopNotification(title, content, icon) {
-            if ("Notification" in window && Notification.permission === "granted") {
-                new Notification(title, {
-                    body: content,
-                    icon: icon || getAbsPath('appicon/WHK.png')
-                });
+            if (isNotificationSupported && Notification.permission === "granted") {
+                try {
+                    // ブラウザがバックグラウンドの場合でも通知が表示されるように
+                    const options = {
+                        body: content,
+                        icon: icon || getAbsPath('appicon/WHK.png'),
+                        badge: getAbsPath('appicon/WHK.png') // Android/Chrome用
+                    };
+                    new Notification(title, options);
+                } catch (e) {
+                    console.warn("Failed to create notification:", e);
+                }
             }
         }
 
@@ -167,8 +188,8 @@
 
                 renderNotifications(appsData, notificationsData);
 
-                // 最新の通知をデスクトップ通知として表示
-                if (notificationsData.length > 0 && Notification.permission === "granted") {
+                // 最新の通知をデスクトップ通知として表示（Chrome/Safari両対応）
+                if (notificationsData.length > 0 && isNotificationSupported && Notification.permission === "granted") {
                     const latest = notificationsData[0];
                     showDesktopNotification(latest.title, latest.content, getAbsPath(`appicon/${latest.appkind}.png`));
                 }
