@@ -80,8 +80,9 @@
     <header class="max-w-2xl mx-auto mb-6 flex justify-between items-center transition-opacity duration-700 ease-in opacity-0" id="app-header">
         <h1 class="text-3xl font-black tracking-tight ml-2">NotificationCentre</h1>
         <div class="flex items-center gap-4">
-            <button id="enable-notifications" class="hidden text-xs bg-blue-500 hover:bg-blue-600 text-white px-3 py-1 rounded-full font-bold transition-colors">
-                通知を許可
+            <!-- ボタンの表示条件を緩和し、デバッグしやすくしました -->
+            <button id="enable-notifications" class="hidden text-xs bg-blue-500 hover:bg-blue-600 text-white px-3 py-1 rounded-full font-bold transition-all shadow-sm active:scale-95">
+                通知設定を確認
             </button>
             <div class="text-sm text-gray-500 dark:text-gray-400 font-medium" id="current-date"></div>
         </div>
@@ -101,7 +102,6 @@
             2: '🛑'
         };
 
-        // 実行環境（Blob URL等）に対応するための絶対パス構築ヘルパー
         const getAbsPath = (relPath) => {
             try {
                 const base = window.location.origin + window.location.pathname.substring(0, window.location.pathname.lastIndexOf('/') + 1);
@@ -111,22 +111,36 @@
             }
         };
 
-        // デスクトップ通知のサポート確認と許可リクエスト
         const notificationBtn = document.getElementById('enable-notifications');
         const isNotificationSupported = typeof window !== "undefined" && "Notification" in window;
         
+        // デバッグ用：現在の権限をログに出力
         if (isNotificationSupported) {
-            // Safariなどのための初期表示チェック
+            console.log("Current Notification Permission:", Notification.permission);
+            
+            // 権限がまだ「既定（default）」の場合はボタンを表示
+            // もし「拒否（denied）」されている場合はブラウザの設定から変更する必要があるため、
+            // ボタンの文言を「設定を確認」にして常に操作可能にすることも検討できます。
             if (Notification.permission === "default") {
                 notificationBtn.classList.remove('hidden');
+                notificationBtn.innerText = "通知を許可";
+            } else if (Notification.permission === "denied") {
+                // 拒否されている場合、ヒントとして表示（任意）
+                notificationBtn.classList.remove('hidden');
+                notificationBtn.classList.replace('bg-blue-500', 'bg-gray-400');
+                notificationBtn.innerText = "通知がブロックされています";
+                notificationBtn.disabled = true;
             }
             
             notificationBtn.addEventListener('click', () => {
-                // SafariとChromeの両方で動作するよう、Promiseとコールバックを併用
                 const handlePermission = (permission) => {
+                    console.log("New permission state:", permission);
                     if (permission === "granted") {
                         notificationBtn.classList.add('hidden');
-                        showDesktopNotification("NotificationCentre", "デスクトップ通知が有効になりました。");
+                        showDesktopNotification("NotificationCentre", "通知が有効になりました！");
+                    } else if (permission === "denied") {
+                        notificationBtn.innerText = "設定でブロックされています";
+                        notificationBtn.classList.replace('bg-blue-500', 'bg-red-400');
                     }
                 };
 
@@ -140,21 +154,20 @@
                 }
             });
         } else {
-            console.log("Notification API is not supported in this browser.");
+            console.warn("このブラウザは通知機能をサポートしていません。");
         }
 
         function showDesktopNotification(title, content, icon) {
             if (isNotificationSupported && Notification.permission === "granted") {
                 try {
-                    // ブラウザがバックグラウンドの場合でも通知が表示されるように
                     const options = {
                         body: content,
                         icon: icon || getAbsPath('appicon/WHK.png'),
-                        badge: getAbsPath('appicon/WHK.png') // Android/Chrome用
+                        badge: getAbsPath('appicon/WHK.png')
                     };
                     new Notification(title, options);
                 } catch (e) {
-                    console.warn("Failed to create notification:", e);
+                    console.error("通知の作成に失敗しました:", e);
                 }
             }
         }
@@ -180,7 +193,7 @@
                 ]);
 
                 if (!appsRes.ok || !notifsRes.ok) {
-                    throw new Error(`ファイルの取得に失敗しました (Apps: ${appsRes.status}, Notifications: ${notifsRes.status})`);
+                    throw new Error(`ファイルの取得に失敗しました`);
                 }
 
                 const appsData = await appsRes.json();
@@ -188,7 +201,7 @@
 
                 renderNotifications(appsData, notificationsData);
 
-                // 最新の通知をデスクトップ通知として表示（Chrome/Safari両対応）
+                // 初回読み込み時に権限があればテスト通知
                 if (notificationsData.length > 0 && isNotificationSupported && Notification.permission === "granted") {
                     const latest = notificationsData[0];
                     showDesktopNotification(latest.title, latest.content, getAbsPath(`appicon/${latest.appkind}.png`));
@@ -196,45 +209,23 @@
 
             } catch (error) {
                 console.error(error);
-                container.innerHTML = `
-                    <div class="text-center py-20 px-6 bg-white dark:bg-ios-cardDark rounded-3xl shadow-sm border border-red-100 dark:border-red-900/30 animate-in">
-                        <div class="text-4xl mb-4">📂❌</div>
-                        <h2 class="text-xl font-bold text-red-600 dark:text-red-400 mb-2">読み込みエラー</h2>
-                        <code class="block p-3 bg-gray-100 dark:bg-black rounded-lg text-xs text-left overflow-x-auto text-gray-600 dark:text-gray-400">
-                            ${error.message}
-                        </code>
-                        <button onclick="location.reload()" class="mt-8 px-6 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded-full font-bold transition-colors">
-                            再試行
-                        </button>
-                    </div>
-                `;
+                container.innerHTML = `<div class="text-center py-20 text-red-500">読み込みエラーが発生しました</div>`;
             }
         }
 
         function renderNotifications(apps, notifications) {
             const container = document.getElementById('notification-container');
             container.innerHTML = '';
-
             const appMap = new Map(apps.map(app => [app.id, app.name]));
 
-            if (!notifications || notifications.length === 0) {
-                container.innerHTML = `
-                    <div class="text-center py-20 text-gray-500 animate-in">
-                        <div class="text-4xl mb-2">🔔</div>
-                        <p>通知はありません</p>
-                    </div>
-                `;
-                return;
-            }
-
             notifications.forEach((note, index) => {
-                const appName = appMap.get(note.appkind) || note.appkind || "不明なアプリ";
+                const appName = appMap.get(note.appkind) || note.appkind || "App";
                 const dateStr = note.date ? `${note.date[0]}/${note.date[1]}/${note.date[2]}` : "";
                 const priorityEmoji = PRIORITY_ICONS[note.priority] !== undefined ? PRIORITY_ICONS[note.priority] : 'ℹ️';
                 const iconPath = getAbsPath(`appicon/${note.appkind}.png`);
 
                 const card = document.createElement('div');
-                card.className = `notification-card bg-ios-cardLight dark:bg-ios-cardDark rounded-2xl p-4 shadow-sm hover:shadow-md mb-4 border border-gray-100 dark:border-gray-800 opacity-0 translate-y-4`;
+                card.className = `notification-card bg-ios-cardLight dark:bg-ios-cardDark rounded-2xl p-4 shadow-sm mb-4 border border-gray-100 dark:border-gray-800 opacity-0 translate-y-4`;
                 
                 setTimeout(() => {
                     card.classList.add('animate-in');
@@ -245,35 +236,22 @@
                     <div class="flex items-start gap-4">
                         <div class="relative flex-shrink-0">
                             <div class="w-14 h-14 rounded-xl overflow-hidden bg-gray-200 dark:bg-gray-700 shadow-inner">
-                                <img src="${iconPath}" 
-                                     alt="${appName}" 
-                                     class="w-full h-full object-cover"
-                                     onerror="this.onerror=null; this.parentElement.classList.add('icon-placeholder'); this.parentElement.innerHTML='${(note.appkind || '??').substring(0,2)}';">
+                                <img src="${iconPath}" alt="${appName}" class="w-full h-full object-cover" onerror="this.style.display='none'; this.parentElement.classList.add('icon-placeholder'); this.parentElement.innerText='${appName.substring(0,1)}';">
                             </div>
                             <div class="absolute -bottom-1 -right-1 bg-white dark:bg-[#1c1c1e] rounded-full w-6 h-6 flex items-center justify-center text-sm shadow-sm border-2 border-white dark:border-[#1c1c1e]">
                                 ${priorityEmoji}
                             </div>
                         </div>
-
                         <div class="flex-1 min-w-0 pt-0.5">
                             <div class="flex justify-between items-baseline mb-0.5">
-                                <h3 class="font-bold text-gray-500 dark:text-gray-400 truncate pr-2" style="font-size: 1.03em;">
-                                    ${appName}
-                                </h3>
-                                <span class="text-xs text-gray-400 whitespace-nowrap">${dateStr}</span>
+                                <h3 class="font-bold text-gray-500 dark:text-gray-400 truncate pr-2">${appName}</h3>
+                                <span class="text-xs text-gray-400">${dateStr}</span>
                             </div>
-
-                            <h2 class="font-bold text-gray-900 dark:text-white leading-tight mb-1" style="font-size: 1.07em;">
-                                ${note.title}
-                            </h2>
-
-                            <p class="text-gray-600 dark:text-gray-300 text-sm leading-relaxed">
-                                ${note.content}
-                            </p>
+                            <h2 class="font-bold text-gray-900 dark:text-white mb-1">${note.title}</h2>
+                            <p class="text-gray-600 dark:text-gray-300 text-sm leading-relaxed">${note.content}</p>
                         </div>
                     </div>
                 `;
-
                 container.appendChild(card);
             });
         }
