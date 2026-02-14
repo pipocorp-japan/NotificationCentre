@@ -49,30 +49,52 @@
             transition: background-color 0.5s ease;
             user-select: none;
             -webkit-tap-highlight-color: transparent;
+            overflow-x: hidden;
         }
 
-        /* iOS-style Glassmorphism */
         .glass-effect {
             backdrop-filter: blur(20px);
             -webkit-backdrop-filter: blur(20px);
         }
 
+        /* Swipe Container */
+        .swipe-container {
+            position: relative;
+            overflow: hidden;
+            border-radius: 22px;
+            touch-action: pan-y;
+        }
+
+        .swipe-action-bg {
+            position: absolute;
+            inset: 0;
+            display: flex;
+            align-items: center;
+            justify-content: flex-end;
+            padding-right: 24px;
+            border-radius: 22px;
+            transition: background-color 0.2s;
+        }
+
         .notification-card {
-            transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.3s ease, margin 0.3s ease;
-            cursor: pointer;
-            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+            position: relative;
+            z-index: 10;
+            transition: transform 0.1s ease-out, opacity 0.3s ease;
+            cursor: grab;
         }
 
         .notification-card:active {
-            transform: scale(0.97);
-            opacity: 0.8;
+            cursor: grabbing;
         }
 
-        .notification-card.read-anim {
-            transform: translateX(100%);
+        .notification-card.swiping {
+            transition: none;
+        }
+
+        .notification-card.dismiss-anim {
+            transition: transform 0.4s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.3s;
+            transform: translateX(-100%) !important;
             opacity: 0;
-            margin-top: -80px;
-            pointer-events: none;
         }
 
         .icon-placeholder {
@@ -113,7 +135,6 @@
             font-size: 22px;
         }
         
-        /* Icon transition animation */
         #toggle-archive span {
             transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
         }
@@ -128,7 +149,6 @@
         </div>
         <div class="flex gap-2">
             <button id="toggle-archive" class="w-10 h-10 flex items-center justify-center bg-white/80 dark:bg-zinc-800/80 glass-effect rounded-full shadow-sm active:scale-90 transition-all">
-                <!-- Initially showing 'archive' to see read items -->
                 <span class="material-symbols-outlined text-gray-600 dark:text-zinc-300">archive</span>
             </button>
             <button id="open-settings" class="w-10 h-10 flex items-center justify-center bg-white/80 dark:bg-zinc-800/80 glass-effect rounded-full shadow-sm active:scale-90 transition-all">
@@ -137,14 +157,13 @@
         </div>
     </header>
 
-    <!-- Filter chips -->
     <div class="max-w-2xl mx-auto mb-6 flex gap-2 overflow-x-auto no-scrollbar py-1" id="filter-container">
         <button class="filter-chip active flex-shrink-0 px-5 py-2 rounded-full bg-white dark:bg-zinc-800 text-sm font-semibold shadow-sm transition-all" data-filter="all">
             すべて
         </button>
     </div>
 
-    <main id="notification-container" class="max-w-2xl mx-auto space-y-2">
+    <main id="notification-container" class="max-w-2xl mx-auto space-y-3">
         <div id="status-message" class="text-center py-24 text-gray-400">
             <div class="inline-block animate-spin rounded-full h-8 w-8 border-2 border-gray-300 border-t-blue-500 mb-4"></div>
             <p class="text-sm font-medium tracking-wide">読み込み中...</p>
@@ -160,7 +179,6 @@
             </div>
             
             <div class="p-6 space-y-8 max-h-[75vh] overflow-y-auto no-scrollbar">
-                <!-- Accent Color -->
                 <section>
                     <h3 class="text-[11px] font-bold text-gray-400 dark:text-zinc-500 uppercase tracking-widest mb-3 ml-2">アクセントカラー</h3>
                     <div class="flex justify-between bg-white dark:bg-zinc-800 p-4 rounded-2xl shadow-sm">
@@ -172,7 +190,6 @@
                     </div>
                 </section>
 
-                <!-- Filter Style -->
                 <section>
                     <h3 class="text-[11px] font-bold text-gray-400 dark:text-zinc-500 uppercase tracking-widest mb-3 ml-2">フィルター表示形式</h3>
                     <div class="bg-white dark:bg-zinc-800 rounded-2xl shadow-sm divide-y dark:divide-zinc-700 overflow-hidden text-sm">
@@ -191,13 +208,12 @@
                     </div>
                 </section>
 
-                <!-- Reset Data -->
                 <section>
                     <h3 class="text-[11px] font-bold text-gray-400 dark:text-zinc-500 uppercase tracking-widest mb-3 ml-2">データ管理</h3>
                     <button id="reset-history" class="w-full py-4 bg-white dark:bg-zinc-800 text-[#ff3b30] font-bold rounded-2xl shadow-sm active:bg-gray-50 dark:active:bg-zinc-700 transition-colors">
                         履歴をリセット
                     </button>
-                    <p class="text-[11px] text-gray-400 dark:text-zinc-500 mt-3 px-2 text-center leading-relaxed">通知の既読状態をすべて解除します。<br>この操作は取り消せません。</p>
+                    <p class="text-[11px] text-gray-400 dark:text-zinc-500 mt-3 px-2 text-center leading-relaxed">通知の既読状態をすべて解除します。</p>
                 </section>
             </div>
         </div>
@@ -261,12 +277,84 @@
         };
 
         const getReadIds = () => JSON.parse(localStorage.getItem(STORAGE_READ) || '[]');
+        
         const markAsRead = (id) => {
             const readIds = getReadIds();
             if (!readIds.includes(id)) {
                 readIds.push(id);
                 localStorage.setItem(STORAGE_READ, JSON.stringify(readIds));
             }
+        };
+
+        const unmarkAsRead = (id) => {
+            const readIds = getReadIds();
+            const newReadIds = readIds.filter(rid => rid !== id);
+            localStorage.setItem(STORAGE_READ, JSON.stringify(newReadIds));
+        };
+
+        // Swipe Logic State
+        let swipeStartPos = null;
+        let currentSwipeCard = null;
+        let currentX = 0;
+
+        const handleTouchStart = (e) => {
+            const touch = e.touches[0];
+            swipeStartPos = { x: touch.clientX, y: touch.clientY };
+            currentSwipeCard = e.currentTarget;
+            currentSwipeCard.classList.add('swiping');
+            currentX = 0;
+        };
+
+        const handleTouchMove = (e) => {
+            if (!swipeStartPos || !currentSwipeCard) return;
+            const touch = e.touches[0];
+            const diffX = touch.clientX - swipeStartPos.x;
+            const diffY = touch.clientY - swipeStartPos.y;
+
+            // Prevent horizontal swipe if scrolling vertically
+            if (Math.abs(diffY) > Math.abs(diffX) && Math.abs(currentX) < 5) {
+                swipeStartPos = null;
+                currentSwipeCard.style.transform = '';
+                return;
+            }
+
+            if (diffX < 0) { // Only allow left swipe
+                e.preventDefault();
+                currentX = diffX;
+                currentSwipeCard.style.transform = `translateX(${diffX}px)`;
+                
+                const bg = currentSwipeCard.parentElement.querySelector('.swipe-action-bg');
+                const threshold = -100;
+                if (diffX < threshold) {
+                    bg.style.backgroundColor = showArchive ? '#34c759' : '#ff9500';
+                } else {
+                    bg.style.backgroundColor = '#e5e7eb';
+                }
+            }
+        };
+
+        const handleTouchEnd = (e) => {
+            if (!currentSwipeCard) return;
+            currentSwipeCard.classList.remove('swiping');
+            const threshold = -100;
+            const noteId = currentSwipeCard.dataset.id;
+
+            if (currentX < threshold) {
+                // Execute Action
+                currentSwipeCard.classList.add('dismiss-anim');
+                setTimeout(() => {
+                    if (showArchive) {
+                        unmarkAsRead(noteId);
+                    } else {
+                        markAsRead(noteId);
+                    }
+                    renderApp();
+                }, 350);
+            } else {
+                currentSwipeCard.style.transform = '';
+            }
+            swipeStartPos = null;
+            currentSwipeCard = null;
         };
 
         document.addEventListener('DOMContentLoaded', async () => {
@@ -285,11 +373,9 @@
                 const iconSpan = btn.querySelector('span');
                 
                 if (showArchive) {
-                    // Changing to archive view: show 'notifications' (bell) icon to go back to inbox
                     iconSpan.textContent = 'notifications';
                     document.getElementById('main-title').textContent = 'アーカイブ';
                 } else {
-                    // Changing to inbox view: show 'archive' icon to see read items
                     iconSpan.textContent = 'archive';
                     document.getElementById('main-title').textContent = '通知';
                 }
@@ -399,20 +485,30 @@
                 const iconPath = getAbsPath(`appicon/${note.appkind}.png`);
                 const priorityIcon = PRIORITY_ICONS[note.priority] || 'info';
 
+                // Swipe Wrapper
+                const wrapper = document.createElement('div');
+                wrapper.className = 'swipe-container';
+
+                // Action BG
+                const actionBg = document.createElement('div');
+                actionBg.className = 'swipe-action-bg';
+                actionBg.innerHTML = `<span class="material-symbols-outlined text-white font-bold">${showArchive ? 'unarchive' : 'archive'}</span><span class="text-white text-xs font-bold ml-1">${showArchive ? '戻す' : 'アーカイブ'}</span>`;
+                wrapper.appendChild(actionBg);
+
+                // Card
                 const card = document.createElement('div');
+                card.dataset.id = noteId;
                 card.className = `notification-card bg-ios-cardLight dark:bg-ios-cardDark glass-effect rounded-[22px] p-4 border border-white/40 dark:border-zinc-700/50 opacity-0`;
                 
-                if (!showArchive) {
-                    card.onclick = () => {
-                        card.classList.add('read-anim');
-                        setTimeout(() => { markAsRead(noteId); renderApp(); }, 300);
-                    };
-                }
+                // Swipe Events
+                card.addEventListener('touchstart', handleTouchStart, {passive: false});
+                card.addEventListener('touchmove', handleTouchMove, {passive: false});
+                card.addEventListener('touchend', handleTouchEnd);
 
                 setTimeout(() => card.classList.add('animate-in'), index * 60);
 
                 card.innerHTML = `
-                    <div class="flex items-start gap-4">
+                    <div class="flex items-start gap-4 pointer-events-none">
                         <div class="w-12 h-12 rounded-[11px] overflow-hidden flex-shrink-0 bg-white/50 shadow-inner relative">
                             <img src="${iconPath}" alt="" class="w-full h-full object-cover" onerror="this.style.display='none'; this.parentElement.classList.add('icon-placeholder'); this.parentElement.innerText='${appName.substring(0,1)}';">
                             <div class="absolute -bottom-1 -right-1 bg-white dark:bg-zinc-900 rounded-full p-0.5 shadow-sm border border-gray-100 dark:border-zinc-800">
@@ -429,7 +525,8 @@
                         </div>
                     </div>
                 `;
-                container.appendChild(card);
+                wrapper.appendChild(card);
+                container.appendChild(wrapper);
             });
         }
     </script>
