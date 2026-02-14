@@ -74,7 +74,12 @@
 
     <header class="max-w-2xl mx-auto mb-6 flex justify-between items-center transition-opacity duration-700 ease-in opacity-0" id="app-header">
         <h1 class="text-3xl font-black tracking-tight ml-2">NotificationCentre</h1>
-        <div class="text-sm text-gray-500 dark:text-gray-400 font-medium" id="current-date"></div>
+        <div class="flex items-center gap-4">
+            <button id="enable-notifications" class="hidden text-xs bg-blue-500 hover:bg-blue-600 text-white px-3 py-1 rounded-full font-bold transition-colors">
+                通知を許可
+            </button>
+            <div class="text-sm text-gray-500 dark:text-gray-400 font-medium" id="current-date"></div>
+        </div>
     </header>
 
     <main id="notification-container" class="max-w-2xl mx-auto space-y-4">
@@ -91,6 +96,33 @@
             2: '🛑'
         };
 
+        // デスクトップ通知の許可リクエスト
+        const notificationBtn = document.getElementById('enable-notifications');
+        
+        if ("Notification" in window) {
+            if (Notification.permission === "default") {
+                notificationBtn.classList.remove('hidden');
+            }
+            
+            notificationBtn.addEventListener('click', () => {
+                Notification.requestPermission().then(permission => {
+                    if (permission === "granted") {
+                        notificationBtn.classList.add('hidden');
+                        showDesktopNotification("NotificationCentre", "デスクトップ通知が有効になりました。");
+                    }
+                });
+            });
+        }
+
+        function showDesktopNotification(title, content, icon) {
+            if ("Notification" in window && Notification.permission === "granted") {
+                new Notification(title, {
+                    body: content,
+                    icon: icon || 'appicon/WHK.png' // デフォルトアイコン
+                });
+            }
+        }
+
         document.addEventListener('DOMContentLoaded', async () => {
             const now = new Date();
             document.getElementById('current-date').textContent = now.toLocaleDateString('ja-JP', { month: 'long', day: 'numeric', weekday: 'short' });
@@ -104,10 +136,8 @@
 
         async function loadDataAndRender() {
             const container = document.getElementById('notification-container');
-            const statusMessage = document.getElementById('status-message');
 
             try {
-                // ファイルのフェッチを実行
                 const [appsRes, notifsRes] = await Promise.all([
                     fetch('apps.json'),
                     fetch('info/notifications.json')
@@ -122,16 +152,18 @@
 
                 renderNotifications(appsData, notificationsData);
 
+                // 最新の通知をデスクトップ通知として送る（デモ用：一番上の通知を表示）
+                if (notificationsData.length > 0 && Notification.permission === "granted") {
+                    const latest = notificationsData[0];
+                    showDesktopNotification(latest.title, latest.content, `appicon/${latest.appkind}.png`);
+                }
+
             } catch (error) {
                 console.error(error);
-                // エラー時の表示
                 container.innerHTML = `
                     <div class="text-center py-20 px-6 bg-white dark:bg-ios-cardDark rounded-3xl shadow-sm border border-red-100 dark:border-red-900/30 animate-in">
                         <div class="text-4xl mb-4">📂❌</div>
                         <h2 class="text-xl font-bold text-red-600 dark:text-red-400 mb-2">読み込みエラー</h2>
-                        <p class="text-gray-500 dark:text-gray-400 text-sm mb-6">
-                            通知データの取得に失敗しました。ファイル構成を確認してください。
-                        </p>
                         <code class="block p-3 bg-gray-100 dark:bg-black rounded-lg text-xs text-left overflow-x-auto text-gray-600 dark:text-gray-400">
                             ${error.message}
                         </code>
